@@ -1,36 +1,21 @@
 {
   "schemaVersion": 1,
-  "id": "addon-template",
+  "id": "stone-sniper",
   "version": "${version}",
-  "name": "Addon Template",
-  "description": "An addon template for Meteor Client addons.",
-  "authors": [
-    "seasnail"
-  ],
-  "contact": {
-    "sources": "https://github.com/MeteorDevelopment/meteor-addon-template"
-  },
-  "icon": "assets/template/icon.png",
+  "name": "Stone Sniper",
+  "description": "Automatically snipes high-paying stone orders",
+  "authors": ["You"],
+  "contact": {},
+  "license": "MIT",
   "environment": "client",
   "entrypoints": {
     "meteor": [
-      "com.example.addon.AddonTemplate"
+      "com.stonesniper.addon.StoneSniperAddon"
     ]
-  },
-  "mixins": [
-    "addon-template.mixins.json"
-  ],
-  "custom": {
-    "meteor-client:color": "225,25,25",
-    "modmenu": {
-      "parent": {
-        "id": "meteor-client"
-      }
-    }
   },
   "depends": {
     "java": ">=21",
-    "minecraft": ["${mc_version}"],
+    "minecraft": ">=1.21",
     "meteor-client": "*"
   }
 }
