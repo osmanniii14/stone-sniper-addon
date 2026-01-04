@@ -1,66 +1,251 @@
-package com.example.addon.modules;
+package com.stonesniper.addon.modules;
 
-import com.example.addon.AddonTemplate;
-import meteordevelopment.meteorclient.events.render.Render3DEvent;
-import meteordevelopment.meteorclient.renderer.ShapeMode;
-import meteordevelopment.meteorclient.settings.ColorSetting;
-import meteordevelopment.meteorclient.settings.DoubleSetting;
-import meteordevelopment.meteorclient.settings.Setting;
-import meteordevelopment.meteorclient.settings.SettingGroup;
+import meteordevelopment.meteorclient.events.world.TickEvent;
+import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.render.color.Color;
-import meteordevelopment.meteorclient.utils.render.color.SettingColor;
+import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
+import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.text.Text;
 
-public class ModuleExample extends Module {
-    private final SettingGroup sgGeneral = this.settings.getDefaultGroup();
-    private final SettingGroup sgRender = this.settings.createGroup("Render");
+public class StoneSniper extends Module {
+    private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
-    /**
-     * Example setting.
-     * The {@code name} parameter should be in kebab-case.
-     * If you want to access the setting from another class, simply make the setting {@code public}, and use
-     * {@link meteordevelopment.meteorclient.systems.modules.Modules#get(Class)} to access the {@link Module} object.
-     */
-    private final Setting<Double> scale = sgGeneral.add(new DoubleSetting.Builder()
-        .name("scale")
-        .description("The size of the marker.")
-        .defaultValue(2.0d)
-        .range(0.5d, 10.0d)
+    private final Setting<Integer> minTotalPayment = sgGeneral.add(new IntSetting.Builder()
+        .name("minimum-total-payment")
+        .description("Minimum total payment to accept stone orders.")
+        .defaultValue(5000)
+        .min(0)
+        .sliderMax(50000)
         .build()
     );
 
-    private final Setting<SettingColor> color = sgRender.add(new ColorSetting.Builder()
-        .name("color")
-        .description("The color of the marker.")
-        .defaultValue(Color.MAGENTA)
+    private final Setting<Boolean> autoDeliver = sgGeneral.add(new BoolSetting.Builder()
+        .name("auto-deliver")
+        .description("Automatically deliver stone when high-paying order is found.")
+        .defaultValue(true)
         .build()
     );
 
-    /**
-     * The {@code name} parameter should be in kebab-case.
-     */
-    public ModuleExample() {
-        super(AddonTemplate.CATEGORY, "world-origin", "An example module that highlights the center of the world.");
+    private boolean hasDelivered = false;
+
+    public StoneSniper() {
+        super(Categories.Misc, "stone-sniper", "Automatically snipes high-paying stone orders on DonutSMP.");
     }
 
-    /**
-     * Example event handling method.
-     * Requires {@link AddonTemplate#getPackage()} to be setup correctly, otherwise the game will crash whenever the module is enabled.
-     */
-    @EventHandler
-    private void onRender3d(Render3DEvent event) {
-        // Create & stretch the marker object
-        Box marker = new Box(BlockPos.ORIGIN);
-        marker = marker.stretch(
-            scale.get() * marker.getLengthX(),
-            scale.get() * marker.getLengthY(),
-            scale.get() * marker.getLengthZ()
-        );
+    @Override
+    public void onActivate() {
+        hasDelivered = false;
+    }
 
-        // Render the marker based on the color setting
-        event.renderer.box(marker, color.get(), color.get(), ShapeMode.Both, 0);
+    @EventHandler
+    private void onTick(TickEvent.Post event) {
+        if (mc.currentScreen == null) return;
+        if (!(mc.currentScreen instanceof GenericContainerScreen)) return;
+
+        GenericContainerScreen screen = (GenericContainerScreen) mc.currentScreen;
+        String title = screen.getTitle().getString();
+
+        if (!title.toLowerCase().contains("stone") && !title.toLowerCase().contains("order")) {
+            return;
+        }
+
+        clickEmptyMap(screen);
+
+        if (autoDeliver.get() && !hasDelivered) {
+            findAndDeliverStone(screen);
+        }
+    }
+
+    private void clickEmptyMap(GenericContainerScreen screen) {
+        for (int i = 0; i < screen.getScreenHandler().slots.size(); i++) {
+            ItemStack stack = screen.getScreenHandler().getSlot(i).getStack();
+            
+            if (stack.getItem() == Items.MAP) {
+                Text name = stack.getName();
+                String nameStr = name.getString().toLowerCase();
+                
+                if (nameStr.contains("empty") || nameStr.contains("refresh") || nameStr.contains("update")) {
+                    mc.interactionManager.clickSlot(
+                        screen.getScreenHandler().syncId,
+                        i,
+                        0,
+                        SlotActionType.PICKUP,
+                        mc.player
+                    );
+                    return;
+                }
+            }
+        }
+    }
+
+    private void findAndDeliverStone(GenericContainerScreen screen) {
+        for (int i = 0; i < screen.getScreenHandler().slots.size(); i++) {
+            ItemStack stack = screen.getScreenHandler().getSlot(i).getStack();
+            
+            if (stack.getItem() == Items.STONE || stack.getItem() == Items.COBBLESTONE) {
+                OrderInfo orderInfo = parseStoneOrder(stack);
+                
+                if (orderInfo != null && orderInfo.totalPayment >= minTotalPayment.get()) {
+                    info("Found high-paying stone order!");
+                    info("Total Payment: " + formatPayment(orderInfo.totalPayment) + " (" + orderInfo.amountNeeded + " stones × " + formatPayment(orderInfo.totalPayment / orderInfo.amountNeeded) + " each)");
+                    info("Progress: $" + formatPayment(orderInfo.currentPaid) + "/" + formatPayment(orderInfo.totalPayment) + " Paid");
+                    info("Delivered: " + orderInfo.delivered + "/" + orderInfo.amountNeeded);
+                    
+                    if (orderInfo.currentPaid < orderInfo.totalPayment) {
+                        mc.interactionManager.clickSlot(
+                            screen.getScreenHandler().syncId,
+                            i,
+                            0,
+                            SlotActionType.PICKUP,
+                            mc.player
+                        );
+                        
+                        hasDelivered = true;
+                        dumpStoneToGui(screen);
+                        return;
+                    } else {
+                        info("Order already fully paid!");
+                    }
+                }
+            }
+        }
+    }
+
+    private OrderInfo parseStoneOrder(ItemStack stack) {
+        try {
+            String name = stack.getName().getString();
+            var lore = stack.getTooltip(mc.player, 
+                mc.options.advancedItemTooltips ? 
+                net.minecraft.client.item.TooltipContext.Default.ADVANCED : 
+                net.minecraft.client.item.TooltipContext.Default.BASIC);
+            
+            OrderInfo info = new OrderInfo();
+            int pricePerStone = 0;
+            
+            for (Text line : lore) {
+                String lineStr = line.getString();
+                
+                if (lineStr.contains("Each")) {
+                    pricePerStone = parsePaymentAmount(lineStr);
+                }
+                
+                if (lineStr.contains("Delivered")) {
+                    String[] parts = lineStr.split("/");
+                    if (parts.length >= 2) {
+                        String deliveredStr = parts[0].replaceAll("[^0-9]", "");
+                        if (!deliveredStr.isEmpty()) {
+                            info.delivered = Integer.parseInt(deliveredStr);
+                        }
+                        
+                        String[] amountParts = parts[1].split(" ");
+                        String amountStr = amountParts[0].replaceAll("[^0-9]", "");
+                        if (!amountStr.isEmpty()) {
+                            info.amountNeeded = Integer.parseInt(amountStr);
+                        }
+                    }
+                }
+                
+                if (lineStr.contains("Paid")) {
+                    if (lineStr.contains("/")) {
+                        String[] parts = lineStr.split("/");
+                        if (parts.length >= 2) {
+                            String paymentPart = parts[1].replace("Paid", "").trim();
+                            int parsed = parsePaymentAmount(paymentPart);
+                            if (parsed > 0) {
+                                info.totalPayment = parsed;
+                            }
+                        }
+                    }
+                    
+                    if (lineStr.startsWith("$")) {
+                        String currentPaidStr = lineStr.substring(1).split("/")[0].trim();
+                        int currentPaid = parsePaymentAmount(currentPaidStr);
+                        info.currentPaid = currentPaid;
+                    }
+                }
+            }
+            
+            if (info.totalPayment == 0 && pricePerStone > 0 && info.amountNeeded > 0) {
+                info.totalPayment = pricePerStone * info.amountNeeded;
+            }
+            
+            if (info.totalPayment > 0) {
+                return info;
+            }
+            
+        } catch (Exception e) {
+            error("Error parsing stone order: " + e.getMessage());
+        }
+        
+        return null;
+    }
+
+    private void dumpStoneToGui(GenericContainerScreen screen) {
+        info("Dumping stone from inventory...");
+        
+        int stoneCount = 0;
+        
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            
+            if (stack.getItem() == Items.STONE || stack.getItem() == Items.COBBLESTONE) {
+                stoneCount += stack.getCount();
+                
+                mc.interactionManager.clickSlot(
+                    screen.getScreenHandler().syncId,
+                    i,
+                    0,
+                    SlotActionType.QUICK_MOVE,
+                    mc.player
+                );
+            }
+        }
+        
+        if (stoneCount > 0) {
+            info("Delivered " + stoneCount + " stone!");
+        } else {
+            warning("No stone found in inventory!");
+        }
+    }
+
+    private int parsePaymentAmount(String text) {
+        try {
+            String lowerText = text.toLowerCase().replaceAll("[^0-9km.]", "");
+            
+            if (lowerText.contains("m")) {
+                String numStr = lowerText.replace("m", "");
+                double value = Double.parseDouble(numStr);
+                return (int) (value * 1_000_000);
+            } else if (lowerText.contains("k")) {
+                String numStr = lowerText.replace("k", "");
+                double value = Double.parseDouble(numStr);
+                return (int) (value * 1_000);
+            } else {
+                return Integer.parseInt(lowerText);
+            }
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+    
+    private String formatPayment(int amount) {
+        if (amount >= 1_000_000) {
+            return String.format("%.1fm", amount / 1_000_000.0);
+        } else if (amount >= 1_000) {
+            return String.format("%.0fk", amount / 1_000.0);
+        } else {
+            return String.valueOf(amount);
+        }
+    }
+
+    private static class OrderInfo {
+        int amountNeeded = 0;
+        int delivered = 0;
+        int totalPayment = 0;
+        int currentPaid = 0;
     }
 }
