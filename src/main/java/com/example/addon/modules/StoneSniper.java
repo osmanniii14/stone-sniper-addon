@@ -103,15 +103,15 @@ public class StoneSniper extends Module {
         }
     }
 
-    private void clickEmptyMap(GenericContainerScreen screen) {
-        for (int i = 0; i < screen.getScreenHandler().slots.size(); i++) {
-            ItemStack stack = screen.getScreenHandler().getSlot(i).getStack();
+private void clickEmptyMap(GenericContainerScreen screen) {
+    for (int i = 0; i < screen.getScreenHandler().slots.size(); i++) {
+        ItemStack stack = screen.getScreenHandler().getSlot(i).getStack();
+        
+        if (stack.getItem() == Items.MAP || stack.getItem() == Items.FILLED_MAP) {
+            Text name = stack.getName();
+            String nameStr = name.getString().toLowerCase();
             
-            if (stack.getItem() == Items.MAP) {
-                Text name = stack.getName();
-                String nameStr = name.getString().toLowerCase();
-                
-                if (nameStr.contains("empty") || nameStr.contains("refresh") || nameStr.contains("update")) {
+            if (nameStr.contains("click") || nameStr.contains("refresh") || nameStr.contains("orders")) {
                     mc.interactionManager.clickSlot(
                         screen.getScreenHandler().syncId,
                         i,
