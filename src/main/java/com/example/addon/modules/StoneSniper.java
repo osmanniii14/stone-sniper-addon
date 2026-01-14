@@ -88,7 +88,7 @@ public class StoneSniper extends Module {
         GenericContainerScreen screen = (GenericContainerScreen) mc.currentScreen;
         String title = screen.getTitle().getString();
 
-        if (!title.toLowerCase().contains("stone") && !title.toLowerCase().contains("order")) {
+if (!title.toLowerCase().contains("orders")) {
             return;
         }
 
