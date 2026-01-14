@@ -11,7 +11,7 @@ A template to allow easy usage of the Meteor Addon API.
 
 #### Clone Manually
 
-- Alternatively, clone this repository using these commands for a clean history:
+- Alternatively, clone this repository using these commands for a clean history: 
   ```bash
   git clone --depth 1 https://github.com/MeteorDevelopment/meteor-addon-template your-addon-name
   cd your-addon-name
